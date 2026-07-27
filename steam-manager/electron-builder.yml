@@ -1,0 +1,57 @@
+appId: com.steammanager.app
+productName: Steam Manager
+copyright: Copyright © 2025 Steam Manager
+
+directories:
+  output: dist
+
+files:
+  - src/**/*
+  - assets/**/*
+  - "!**/*.test.js"
+  - "!**/node_modules/.cache"
+
+extraResources:
+  - from: assets/icons/
+    to: icons/
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: assets/icons/app.ico
+
+nsis:
+  artifactName: "Steam Manager Setup.exe"
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Steam Manager
+  uninstallDisplayName: Steam Manager
+  installerIcon: assets/icons/app.ico
+  uninstallerIcon: assets/icons/app.ico
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+
+portable:
+  artifactName: "Steam Manager.exe"
+
+compression: normal
+npmRebuild: true
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+
+# Publish target for auto-updates. electron-builder generates `latest.yml`
+# (with SHA-512 checksums) alongside the installer and uploads both to the
+# GitHub release; electron-updater reads `latest.yml` to find + verify updates.
+publish:
+  provider: github
+  owner: atro5234
+  repo: nfa.tool-bais
+  releaseType: release

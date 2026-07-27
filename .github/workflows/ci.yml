@@ -1,0 +1,56 @@
+name: CI
+
+# The application lives in the steam-manager/ subdirectory, but GitHub Actions
+# only runs workflows from <repo-root>/.github/workflows. So this workflow sits
+# at the root and runs every npm step inside steam-manager/ via working-directory.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+defaults:
+  run:
+    working-directory: steam-manager
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: steam-manager/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  build:
+    name: Build (windows-latest)
+    needs: [test]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: steam-manager/package-lock.json
+      - run: npm ci
+      # Build the installer but never publish from CI (publishing is the
+      # Release workflow's job, gated on a version tag).
+      - name: Build (no publish)
+        run: npm run build -- --publish never
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: steam-manager-windows
+          path: steam-manager/dist/**
+          retention-days: 7

@@ -1,0 +1,8 @@
+node_modules/
+release/
+coverage/
+dist/
+backups/
+data/
+logs/
+*.db

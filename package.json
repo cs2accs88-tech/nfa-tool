@@ -1,0 +1,38 @@
+{
+  "name": "steam-manager",
+  "version": "0.1.0",
+  "description": "A beginner-friendly Electron desktop scaffold for Steam Manager.",
+  "main": "src/main/index.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "build": "electron-builder",
+    "test": "node --test tests"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "better-sqlite3": "^10.0.0"
+  },
+  "devDependencies": {
+    "electron": "^26.0.0",
+    "electron-builder": "^24.6.0"
+  },
+  "build": {
+    "appId": "com.example.steamanager",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "src/main/index.js"
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "assets/app-icon.ico"
+    }
+  }
+}

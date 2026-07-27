@@ -1,0 +1,31 @@
+node_modules/
+dist/
+out/
+build/
+.env
+.env.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+.vscode/
+.idea/
+
+# Debug / scratch files (never commit)
+_*
+*.exe
+.vs/
+
+# Steam Manager build + deps
+steam-manager/node_modules/
+steam-manager/dist/
+steam-manager/release/
+
+# Additional build output / caches / temp / OS files
+release/
+bin/
+obj/
+temp/
+tmp/
+*.log
+Thumbs.db

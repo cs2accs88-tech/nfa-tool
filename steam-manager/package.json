@@ -1,0 +1,32 @@
+{
+  "name": "steam-manager",
+  "version": "1.0.0",
+  "description": "Steam account management application",
+  "main": "src/main/index.js",
+  "private": true,
+  "author": {
+    "name": "Steam Manager"
+  },
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron . --dev",
+    "start": "electron .",
+    "build": "electron-builder --config electron-builder.yml",
+    "build:win": "electron-builder --win --config electron-builder.yml",
+    "build:portable": "electron-builder --win portable --config electron-builder.yml",
+    "build:installer": "electron-builder --win nsis --config electron-builder.yml",
+    "package": "electron-builder --dir --config electron-builder.yml",
+    "postinstall": "electron-builder install-app-deps",
+    "test": "node --test tests/unit/utils/steamVdf.test.js tests/unit/utils/vdfFile.test.js tests/unit/main/updateFormat.test.js tests/unit/main/updateHistory.test.js tests/unit/main/updateSettings.test.js",
+    "test:vdf": "node --test tests/unit/utils/steamVdf.test.js tests/unit/utils/vdfFile.test.js",
+    "test:update": "node --test tests/unit/main/updateFormat.test.js tests/unit/main/updateHistory.test.js tests/unit/main/updateSettings.test.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8"
+  }
+}

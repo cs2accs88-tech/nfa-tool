@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.steamstatic.com https://*.akamaihd.net;">
+  <title>Steam Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loading-title">Steam Manager</div>
+    <div class="loading-subtitle">Account Management Tool</div>
+    <div class="spinner"></div>
+    <div class="loading-status" id="loading-status">Initializing...</div>
+  </div>
+
+  <!-- Main Application -->
+  <div id="app">
+    <header id="titlebar">
+      <div class="titlebar-info">
+        <span class="logo-dot"></span>
+        <h1>Steam Manager</h1>
+        <span class="version-badge" id="version-badge">v1.0.0</span>
+      </div>
+      <div class="window-controls">
+        <button id="btn-minimize" title="Minimize">&#x2014;</button>
+        <button id="btn-maximize" title="Maximize">&#x25A1;</button>
+        <button id="btn-close" class="close" title="Close">&#x2715;</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <nav id="sidebar">
+        <button class="nav-item" data-view="dashboard">Dashboard</button>
+        <button class="nav-item" data-view="tokens">Token Import</button>
+        <button class="nav-item" data-view="accounts">Accounts</button>
+        <button class="nav-item" data-view="status">Account Status</button>
+        <button class="nav-item" data-view="updates">Updates</button>
+      </nav>
+
+      <main id="content">
+        <!-- Default empty state (shown on start) -->
+        <section class="view" id="view-empty">
+          <div class="empty-state">
+            <div class="empty-key">TAB</div>
+            <p class="empty-title">Press <kbd>TAB</kbd> to open the Dashboard</p>
+            <p class="hint">Or pick a section from the left. Press <kbd>ESC</kbd> to return here.</p>
+          </div>
+        </section>
+
+        <!-- Dashboard -->
+        <section class="view hidden" id="view-dashboard">
+          <h2>Dashboard</h2>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="label">Accounts</div>
+              <div class="value" id="stat-accounts">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Database</div>
+              <div class="value ok" id="stat-db">Connected</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Version</div>
+              <div class="value" id="stat-version">1.0.0</div>
+            </div>
+          </div>
+          <p class="hint">Use <strong>Token Import</strong> to add accounts from your token list.</p>
+        </section>
+
+        <!-- Token Import -->
+        <section class="view hidden" id="view-tokens">
+          <h2>Token Import</h2>
+          <p class="hint">
+            Paste one account per line in the format:<br>
+            <code>SteamID64----token----csgoRank:5----vacStatus:Clean----primeStatus:Yes----...</code>
+          </p>
+          <textarea id="token-input" spellcheck="false"
+            placeholder="76561199486156161----eyJ...----csgoRank:5----vacStatus:Clean----primeStatus:Yes----inventoryValue:0.66----medals:6----lastchecked:2026-07-12T22:27:12.325Z"></textarea>
+          <div class="button-row">
+            <button class="btn primary" id="btn-import-tokens">Import Tokens</button>
+            <button class="btn" id="btn-import-file">Import from File…</button>
+            <button class="btn ghost" id="btn-clear">Clear</button>
+          </div>
+          <div id="import-result" class="result hidden"></div>
+        </section>
+
+        <!-- Accounts -->
+        <section class="view hidden" id="view-accounts">
+          <div class="accounts-header">
+            <h2>Accounts</h2>
+            <div class="button-row" style="margin:0">
+              <button class="btn steam small" id="btn-login-selected" disabled>&#9654; Start Selected</button>
+            </div>
+          </div>
+          <p class="select-hint" id="login-hint">
+            Click a row to select an account, then press <strong>Start Selected</strong> to
+            launch Steam signed in as that account. Accounts without a token can't be started.
+            To refresh every account's information at once, use <strong>Check All</strong> in the
+            <strong>Account Status</strong> tab — the Accounts table updates automatically when it finishes.
+          </p>
+
+          <div class="table-wrap">
+            <table id="accounts-table">
+              <thead>
+                <tr>
+                  <th>SteamID64</th>
+                  <th>Name</th>
+                  <th>Token</th>
+                  <th>Rank</th>
+                  <th>Elo</th>
+                  <th>Prime</th>
+                  <th>VAC</th>
+                  <th>Inv $</th>
+                  <th>Last checked</th>
+                  <th>Profile</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="accounts-body">
+                <tr><td colspan="11" class="empty">No accounts yet. Import tokens to get started.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Account Status -->
+        <section class="view hidden" id="view-status">
+          <div class="accounts-header">
+            <h2>Account Status</h2>
+            <div class="button-row" style="margin:0">
+              <button class="btn primary small" id="btn-status-check">Check All</button>
+              <button class="btn danger small" id="btn-remove-dead">Remove All Dead</button>
+            </div>
+          </div>
+
+          <div class="status-toolbar">
+            <div class="summary-chips">
+              <span class="chip">Total <b id="sum-total">0</b></span>
+              <span class="chip ok">Valid <b id="sum-valid">0</b></span>
+              <span class="chip bad">Dead <b id="sum-dead">0</b></span>
+            </div>
+            <div class="filter-controls">
+              <label>Filter
+                <select id="status-filter">
+                  <option value="all">All</option>
+                  <option value="valid">Valid</option>
+                  <option value="dead">Dead</option>
+                  <option value="vac">VAC banned</option>
+                </select>
+              </label>
+              <label>Sort
+                <select id="status-sort">
+                  <option value="name">Name</option>
+                  <option value="status">Status</option>
+                  <option value="rank">Rank</option>
+                  <option value="checked">Last checked</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="update-bar hidden" id="status-progress">
+            <div class="progress-track"><div class="progress-fill" id="status-progress-fill"></div></div>
+            <div class="update-meta"><span id="status-progress-label">Checking…</span><span id="status-progress-count"></span></div>
+            <div class="progress-detail" id="status-progress-detail"></div>
+          </div>
+          <div class="result hidden" id="status-summary"></div>
+
+          <p class="select-hint">
+            <strong>Check All</strong> performs a full sign-in for each stored account one at a time
+            (never logging anyone out) and waits for Steam to fully initialize before collecting the
+            account's info. Any token that can't complete sign-in is marked <strong>Dead</strong>
+            immediately and enrichment is skipped for that account. Steam is switched per account,
+            so this takes a while. Rank, Elo, Prime, VAC and Inventory come from stored data; persona
+            name is refreshed live from Steam. The Accounts tab updates automatically when the scan
+            (or any per-account update) finishes.
+          </p>
+
+          <div class="table-wrap">
+            <table id="status-table">
+              <thead>
+                <tr>
+                  <th class="col-dot"></th>
+                  <th>Name</th>
+                  <th>SteamID</th>
+                  <th>Token</th>
+                  <th>VAC</th>
+                  <th>Rank</th>
+                  <th>Last checked</th>
+                </tr>
+              </thead>
+              <tbody id="status-body">
+                <tr><td colspan="7" class="empty">No accounts yet. Import tokens to get started.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Updates -->
+        <section class="view hidden" id="view-updates">
+          <div class="accounts-header">
+            <h2>Updates</h2>
+            <div class="button-row" style="margin:0">
+              <button class="btn primary small" id="btn-upd-check">Check for Updates</button>
+              <button class="btn steam small hidden" id="btn-upd-download">Download Update</button>
+              <button class="btn small hidden" id="btn-upd-install">Restart &amp; Install</button>
+            </div>
+          </div>
+
+          <div class="status-toolbar">
+            <div class="summary-chips">
+              <span class="chip">Current <b id="upd-current">—</b></span>
+              <span class="chip ok">Latest <b id="upd-latest">—</b></span>
+            </div>
+          </div>
+
+          <div class="result" id="upd-status">
+            <div id="upd-status-text">Checking your version…</div>
+          </div>
+
+          <div class="update-bar hidden" id="upd-progress">
+            <div class="progress-track"><div class="progress-fill" id="upd-progress-fill"></div></div>
+            <div class="update-meta"><span id="upd-progress-label">Downloading…</span><span id="upd-progress-percent"></span></div>
+            <div class="progress-detail" id="upd-progress-detail"></div>
+          </div>
+
+          <div class="result hidden" id="upd-error"></div>
+
+          <div class="upd-notes hidden" id="upd-notes-wrap">
+            <h3>Release notes</h3>
+            <pre id="upd-notes"></pre>
+          </div>
+
+          <h3>Settings</h3>
+          <div class="upd-settings">
+            <label class="toggle"><input type="checkbox" id="upd-auto-check"> Check for updates automatically</label>
+            <label class="toggle"><input type="checkbox" id="upd-auto-download"> Download updates automatically</label>
+            <label class="toggle"><input type="checkbox" id="upd-notify"> Ask before installing a downloaded update</label>
+          </div>
+
+          <h3>History</h3>
+          <div class="table-wrap">
+            <table id="upd-history-table">
+              <thead>
+                <tr><th>When</th><th>Event</th><th>Version</th><th>Details</th></tr>
+              </thead>
+              <tbody id="upd-history-body">
+                <tr><td colspan="4" class="empty">No update activity yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="select-hint">
+            Updates are delivered through signed GitHub releases and verified (SHA-512) before
+            installing, so a corrupted or tampered download is never applied. Automatic updates
+            run in the installed (packaged) app — in development this panel shows your version and
+            settings only.
+          </p>
+        </section>
+
+      </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
