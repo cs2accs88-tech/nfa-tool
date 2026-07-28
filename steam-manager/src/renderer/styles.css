@@ -19,6 +19,7 @@ body {
   transition: opacity 0.4s ease;
 }
 #loading-screen.hidden { opacity: 0; pointer-events: none; visibility: hidden; }
+.loading-logo { width: 96px; height: 96px; border-radius: 18px; object-fit: contain; margin-bottom: 22px; }
 .loading-title { font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 8px; }
 .loading-subtitle { font-size: 14px; color: #8a8a8a; margin-bottom: 40px; }
 .spinner {
@@ -38,7 +39,7 @@ body {
   -webkit-app-region: drag;
 }
 .titlebar-info { display: flex; align-items: center; gap: 10px; }
-.logo-dot { width: 14px; height: 14px; border-radius: 4px; background: linear-gradient(135deg,#ffffff,#8a8a8a); }
+.logo-mark { width: 20px; height: 20px; border-radius: 5px; object-fit: contain; display: block; }
 #titlebar h1 { font-size: 15px; font-weight: 600; color: #fff; }
 .version-badge { font-size: 11px; background: #1e1e1e; color: #cfcfcf; padding: 3px 8px; border-radius: 4px; }
 .window-controls { display: flex; gap: 4px; -webkit-app-region: no-drag; }
