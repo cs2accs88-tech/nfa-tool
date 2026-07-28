@@ -35,8 +35,17 @@ const STEP_DELAY_MS = 120;
 /** Retries for a transient per-account DB write failure. */
 const UPDATE_RETRIES = 2;
 
-/** How long to wait for Steam to confirm sign-in per account (login scan). */
-const LOGIN_TIMEOUT_MS = 60000;
+/**
+ * Login-success monitoring window per account (login scan). As soon as an
+ * account's login starts, we watch for a successful sign-in for this long; if
+ * Steam has not confirmed the sign-in within it, the account is classified as
+ * dead and the scan moves on immediately — no long 30-50s timeout, no retries.
+ * Kept as a named constant so tuning it is a one-line change. Default: 5s.
+ */
+const LOGIN_SUCCESS_TIMEOUT_MS = 5000;
+
+/** Base offset to convert a SteamID64 to a legacy 32-bit account id. */
+const STEAMID64_BASE = 76561197960265728n;
 
 /** Persisted statuses we recognise (last-check result stored in updateStatus). */
 const KNOWN_STATUSES = ['valid', 'expired', 'invalid', 'dead'];
@@ -54,6 +63,29 @@ function db() {
 /** @param {number} ms @returns {Promise<void>} */
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Monitors Steam's local `ActiveUser` value and resolves `true` as soon as the
+ * target account is the signed-in user, or `false` if that has not happened
+ * within `timeoutMs`. Purely local + read-only — it only reads a registry
+ * value, never touches a token and never contacts the network. Polls
+ * frequently so a successful login is detected quickly and a dead account is
+ * given up on the moment the window elapses.
+ * @param {number} steam32 - target account's 32-bit id
+ * @param {number} timeoutMs
+ * @param {number} [pollMs=400]
+ * @returns {Promise<boolean>}
+ */
+async function waitForSignedIn(steam32, timeoutMs, pollMs = 400) {
+  const { getActiveUser } = require('./steamClientLoginService');
+  const target = Number(steam32);
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (getActiveUser() === target) return true;
+    await wait(pollMs);
+  }
+  return getActiveUser() === target;
 }
 
 /**
@@ -263,21 +295,21 @@ async function checkAllAccounts(opts = {}) {
 
 /**
  * LOGIN scan (the "Check All" workflow). For every stored account:
- *   1. switch Steam to the account (existing switch logic),
- *   2. launch the Steam client,
- *   3. wait for Steam to fully initialize (stable ActiveUser match),
- *   4. verify the account is fully signed in,
- *   5. on success, run the After Steam Enrichment Helper to collect account
- *      information and persist it,
- *   6. persist the token status ("valid" / "dead") + `lastCheckedAt`,
- *   7. continue with the next account — never stopping the scan on a failure.
+ *   1. switch Steam to the account + launch the client (existing switch logic),
+ *   2. monitor for a successful sign-in for up to LOGIN_SUCCESS_TIMEOUT_MS (5s),
+ *   3. if the sign-in is confirmed the account is "working"; if not, it is
+ *      classified "dead" the instant the window elapses,
+ *   4. on success, run the After Steam Enrichment Helper to collect account
+ *      information and persist it (unchanged for working accounts),
+ *   5. persist the token status ("valid" / "dead") + `lastCheckedAt`,
+ *   6. continue with the next account — never stopping the scan on a failure.
  *
- * Dead-token detection: any failure to complete the sign-in (auth failure,
- * session never established, account never reaches a fully logged-in state,
- * missing/invalid Steam install) marks the account as `dead`. The status is
- * persisted immediately, enrichment is skipped, and we move to the next
- * account. Each account gets at most one retry on a *thrown* verification
- * error (transient) — a clean "not signed in" result is never retried.
+ * Fast dead-account detection: as soon as the login starts we watch for a
+ * successful sign-in for only LOGIN_SUCCESS_TIMEOUT_MS (5 seconds). If Steam
+ * has not confirmed the sign-in by then — or the login could not even start
+ * (expired/invalid token, missing Steam) — the account is marked `dead`
+ * immediately, its status is persisted, enrichment is skipped, and the scan
+ * moves straight on. There are no retries and no 30-50s waits.
  *
  * Reliability:
  *   - Strictly sequential (Steam can only host one signed-in user at a time).
@@ -295,7 +327,7 @@ async function checkAllViaLogin(opts = {}) {
   const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {};
 
   try {
-    const { verifyAccountLogin } = require('./steamClientLoginService');
+    const { loginToClient } = require('./steamClientLoginService');
     const { enrichAccount } = require('./afterSteamEnrichmentHelper');
 
     const rows = loadRows();
@@ -322,20 +354,39 @@ async function checkAllViaLogin(opts = {}) {
       const displayName = row.personaName || row.username || String(row.steamId64);
       emit(displayName, 'processing');
 
-      // 1-4) Switch → launch Steam → wait for full initialization → verify
-      //      sign-in. One retry only when verification *throws* (transient);
-      //      a clean "not signed in" outcome is treated as a dead token and
-      //      never retried indefinitely.
-      let res = null;
-      for (let attempt = 0; attempt <= 1; attempt += 1) {
-        try {
-          res = await verifyAccountLogin(row.id, { timeoutMs: LOGIN_TIMEOUT_MS });
-          break;
-        } catch (err) {
-          logger.error('login verification threw', { id: row.id, attempt, error: err.message });
-          res = null;
-          if (attempt < 1) await wait(1000);
+      // Start the login (switch config + launch Steam), then monitor for a
+      // successful sign-in for a short, fixed window. The moment Steam confirms
+      // the account is signed in, it is a working account and the normal
+      // checking continues below (unchanged). If the sign-in is NOT confirmed
+      // within LOGIN_SUCCESS_TIMEOUT_MS, the account is classified dead right
+      // away and the scan moves straight on — no 30-50s wait, no retries.
+      //
+      // `res` mirrors the previous verifyAccountLogin result shape so the rest
+      // of the loop is untouched.
+      let res = { loggedIn: false, accountName: displayName, reason: null };
+      try {
+        const login = await loginToClient(row.id);
+        if (!login || !login.success) {
+          // Definitive, instant failure (expired/invalid token, Steam missing,
+          // switch already in progress) — nothing to monitor.
+          res.reason = (login && login.error) || 'Sign-in could not be started';
+        } else {
+          res.accountName = login.accountName || displayName;
+          let steam32 = null;
+          try { steam32 = Number(BigInt(String(login.steamId64)) - STEAMID64_BASE); } catch { steam32 = null; }
+          if (steam32 == null) {
+            res.reason = 'Invalid SteamID';
+          } else {
+            res.loggedIn = await waitForSignedIn(steam32, LOGIN_SUCCESS_TIMEOUT_MS);
+            if (!res.loggedIn) {
+              res.reason = `Sign-in not confirmed within ${Math.round(LOGIN_SUCCESS_TIMEOUT_MS / 1000)}s`;
+            }
+          }
         }
+      } catch (err) {
+        // A thrown error is treated as a dead account; the scan never stops.
+        logger.error('login start threw', { id: row.id, error: err.message });
+        res.reason = err.message;
       }
 
       const loggedIn = !!(res && res.loggedIn);
